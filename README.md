@@ -2,149 +2,212 @@
 
 ## English | [中文](README_CN.md)
 
-**GoHomeEasy** is a Shadowsocks subscription management tool based on Cloudflare Workers, designed specifically for **home broadband users without a public IP** to access their home network remotely.
+**GoHomeEasy** is a Serverless-based (Cloudflare Workers / AWS Lambda) Shadowsocks/Clash subscription management tool, designed for **home broadband users without a public IP**.
 
-It leverages **Lucky's NAT traversal** and automatic subscription updates, allowing users to **access their home Shadowsocks server from anywhere** without frequently changing dynamic IP addresses and ports manually.
+It leverages **Lucky's NAT traversal** capabilities combined with Serverless automated subscription updates, allowing you to **directly access your home LAN from anywhere (office, mobile network)** without manually updating dynamic IPs and ports.
 
 ---
 
-## 🌟 **Features**
+## 🌟 **Why GoHomeEasy?**
 
-✅ **Ideal for home broadband users without a public IP to access their home LAN remotely**  
-✅ **Supports Lucky Webhook for automatic Shadowsocks subscription updates**  
-✅ **Supports dynamic configuration of Shadowsocks `method` (encryption method) and `password`**  
-✅ **Based on Cloudflare Workers + KV, no need for a self-hosted server**  
-✅ **API Key authentication ensures data security**  
-✅ **Supports Cloudflare custom domain access to bypass `workers.dev` restrictions in Mainland China**  
+✅ **Home Broadband Savior**: Access NAS, soft routers, and PCs remotely without a public IP.
+
+✅ **Automated**: Automatically updates subscriptions via Lucky Webhook when your home IP changes.
+
+✅ **Secure**: Supports API Key authentication to prevent unauthorized scanning.
+
+✅ **Serverless**: No server required. Cloudflare Workers offers a generous free tier that is usually sufficient for personal use.
+
+### Platform Comparison
+
+| Feature | **Cloudflare Workers (Recommended)** 🏆 | **AWS Lambda** |
+| :--- | :--- | :--- |
+| **Ease of Use** | ⭐⭐⭐⭐⭐ (Very Simple) | ⭐⭐⭐ (Slightly Complex) |
+| **Cost** | **Free** (100k requests/day) | **Free** (1M requests/month) |
+| **Network** | 🌍 Global access except Chinese Mainland | 🇨🇳 Not blocked by Mainland China |
 
 ---
 
 ## ⚙️ **Prerequisites**
 
-To successfully deploy **GoHomeEasy**, prepare the following:
-
-🔹 **Linux home server or OpenWRT router**  
-🔹 **Shadowsocks server setup** (Recommended: [PassWall2 plugin](https://github.com/xiaorouji/openwrt-passwall2) for OpenWRT)  
-🔹 **Install [Lucky NAT Traversal](https://lucky666.cn)** and map the Shadowsocks server port to the public network  
-🔹 **Cloudflare account** (free account is sufficient for Workers deployment)  
-🔹 **Domain managed by Cloudflare DNS** (optional, for bypassing `workers.dev` restrictions in China)  
-🔹 **Shadowsocks-compatible client for mobile/PC** (e.g., Shadowrocket on iOS)  
-
----
-
-## 💻 **Shadowsocks Server Configuration**
-
-Using PassWall2 as an example:
-
-1. Navigate to the "Server" tab in PassWall2 and click "Add"
-2. Configure as follows:
-   - Enable: ✅ Checked
-   - Name: Custom
-   - Type: Sing-Box
-   - Protocol: Shadowsocks
-   - Listening Port: 8000 (or custom)
-   - Password: Custom
-   - Encryption: Recommended `chacha20-ietf-poly1305`
-   - Allow LAN Access: ✅ Checked
-   - Keep other settings default
-3. Click **Save & Apply**, return to the main menu
-4. Check "Enable" and click **Save & Apply**
+1.  **Home Server/Router**: Running OpenWrt or Linux.
+2.  **Shadowsocks Server**: Recommended **PassWall2** or **Shadowsocks-Libev** on OpenWrt.
+3.  **Lucky NAT Traversal**: Installed and configured for STUN traversal ([Lucky Official Site](https://lucky666.cn)), ensuring successful traversal visibility.
+4.  **Cloud Account**:
+      * **Cloudflare Account** (Recommended): For deploying Workers.
+      * *Or* AWS Account: For deploying Lambda.
+5.  **Client**: iOS/MacOS Shadowrocket or other clients supporting SS/Clash subscriptions.
 
 ---
 
-## 🛠 **Cloudflare Workers Configuration**
+## 💻 **Step 1: Configure Home Shadowsocks Server**
 
-### 1️⃣ **Create a Workers Service**
-1. Log in to **[Cloudflare Dashboard](https://dash.cloudflare.com/)**
-2. Go to **Workers & Pages**, click **Create**
-3. Select **"Start from template" → "Hello world"**
-4. Enter **Service Name** (e.g., `GoHomeEasy`), click **Deploy**
+*Example using OpenWrt Passwall2:*
 
-### 2️⃣ **Edit Workers Code**
-1. Open the newly created Worker, click **"< / >"** to edit the code
-2. Delete the default code
-3. Paste **`GoHomeEasy.js` code** from this repository
-4. Modify `"your_secure_api_key"` in the source code and keep it safe
-5. Click **Deploy**
-
-### 3️⃣ **Bind Cloudflare KV Storage**
-1. Navigate to **Objects & Storage → KV**
-2. Click **+ Create**, name it `GoHomeEasy_KV`
-3. Go to your **Worker** → **Settings**
-4. Click **Bindings → + Add KV Namespace**
-   - **Variable Name**: `KV_NAMESPACE`
-   - **KV Namespace**: Select `GoHomeEasy_KV`
-5. Click **Deploy**
+1.  **Add Node**: Click "Add" in the "Server" tab.
+2.  **Configure Parameters**:
+      * **Type**: Shadowsocks (Sing-Box core recommended).
+      * **Listening Port**: `8000` (or others).
+      * **Encryption**: `chacha20-ietf-poly1305` recommended.
+      * **Password**: Set a strong password.
+      * **LAN Access**: **Must Check** (allows remote access to home LAN devices).
+3.  **Save and Apply**.
 
 ---
 
-## 🌍 **Use Cloudflare Custom Domain (Optional, only recommend for Mainland China Users)**
+## ☁️ **Step 2: Deploy Cloud Subscription Service**
 
-Follow these steps: [EdgeTunnel Issue #27](https://github.com/zizifn/edgetunnel/issues/27)
+### 🏆 **Plan A: Cloudflare Workers (Recommended)**
+
+This is the easiest method. No servers to manage, and it's free.
+
+#### **1. Create KV Namespace**
+
+1.  Log in to [Cloudflare Dashboard](https://dash.cloudflare.com/).
+2.  Go to `Workers & Pages` -> `KV`.
+3.  Create a namespace named `GoHomeEasy_KV`.
+
+#### **2. Create Worker**
+
+1.  Go to `Workers & Pages` -> `Overview` -> `Create application` -> `Create Worker`.
+2.  Name it `GoHomeEasy`.
+3.  Click `Deploy`.
+
+#### **3. Edit Code**
+
+1.  Click `Edit code`.
+2.  Copy the content of `GoHomeEasy_CF_SS.js` (for Shadowsocks) or `GoHomeEasy_CF_Clash.js` (for Clash) from this repository.
+    *   *Note: Choose the file based on the subscription format you need.*
+3.  Replace the code in the editor.
+4.  Modify `const SECRET_KEY = "your_secret_key";` with your own secure key.
+
+#### **4. Bind KV Namespace**
+
+1.  Go back to the Worker's `Settings` -> `Variables` (or `Bindings`).
+2.  Under `KV Namespace Bindings`, click `Add binding`.
+3.  **Variable name**: `KV_NAMESPACE`.
+4.  **KV Namespace**: Select `GoHomeEasy_KV`.
+5.  **Deploy**.
 
 ---
 
-## 🔗 **Configure Lucky Webhook**
+### **Plan B: AWS Lambda (For Mainland China)**
 
-In **Lucky Webhook Settings**, enter the following:
+If you prefer AWS or need a specific region.
 
-### 1️⃣ **Webhook URL (POST Request)**
-- **Cloudflare Workers Native Domain**:
-  ```
-  https://your-worker-name.workers.dev/
-  ```
-- **Cloudflare Custom Domain**:
-  ```
-  https://gohome.yourdomain.com/
-  ```
+#### **1. Create DynamoDB Table**
 
-### 2️⃣ **Request Headers**
-```json
-  Content-Type: application/json
-  Authorization: Bearer your_secure_api_key
+1.  Log in to [AWS Console](https://console.aws.amazon.com/), select a region (e.g., Singapore).
+2.  Go to **DynamoDB** -> **Create table**.
+3.  **Table name**: `Subscription`.
+4.  **Partition key**: `id` (String).
+5.  **Create table**.
+
+#### **2. Create Lambda Function**
+
+1.  Go to **Lambda** -> **Create function**.
+2.  **Function name**: `GoHomeEasy`.
+3.  **Runtime**: `Node.js 24.x` (or newer).
+4.  **Create function**.
+
+#### **3. Write Code**
+
+1.  Replace `index.mjs` content with contents in `GoHomeEasy_AWS_SS.js` or `GoHomeEasy_AWS_Clash.js`.
+2.  **Deploy**.
+
+#### **4. Permission & Environment Variables**
+
+1.  **Environment Variables**:
+      * `SECRET_KEY`: Your API key.
+      * `TABLE_NAME`: `Subscription`.
+2.  **Permissions**:
+      * Add `DynamoDB` permissions (`PutItem`, `GetItem`) to the Lambda's execution role.
+
+#### **5. Create API Gateway**
+
+1.  **Add trigger** -> **API Gateway**.
+2.  **Create a new API** -> **HTTP API** -> **Security: Open**.
+3.  Get the **API Endpoint**.
+
+---
+
+## 🔗 **Step 3: Configure Lucky Webhook**
+
+Enable **Webhook** in Lucky STUN rules.
+
+### **1. Webhook URL (POST)**
+
+*   🏆 **Cloudflare Users**:
+    ```text
+    https://your-worker-name.your-subdomain.workers.dev/
+    ```
+*   ☁️ **AWS Users**:
+    ```text
+    https://your-api-id.execute-api.region.amazonaws.com/default/GoHomeEasy
+    ```
+
+### **2. Request Headers**
+
+```text
+Content-Type: application/json
+Authorization: Bearer YOUR_SECRET_KEY
 ```
 
-### 3️⃣ **Request Body**
+### **3. Request Body**
+
+Lucky automatically replaces `#{ip}` and `#{port}`.
+
 ```json
 {
   "ip": "#{ip}",
   "port": "#{port}",
   "method": "chacha20-ietf-poly1305",
-  "password": "your_password"
+  "password": "YOUR_SHADOWSOCKS_PASSWORD"
 }
 ```
 
----
-
-## 📥 **Client Subscription Configuration**
-
-Using Shadowrocket 🚀 as an example:
-
-### 1️⃣ **Add Subscription URL**
-1. Open **Shadowrocket**, tap `+`, select "Subscription"
-2. Enter **Subscription URL**:
-   - **Cloudflare Workers Native Domain**:
-     ```
-     https://your-worker-name.workers.dev/?api_key=your_secure_api_key
-     ```
-   - **Cloudflare Custom Domain**:
-     ```
-     https://gohome.yourdomain.com/?api_key=your_secure_api_key
-     ```
-3. Tap **Save**, subscription updates automatically ✅
+> **Note**: `method` and `password` must match your server settings.
 
 ---
 
-### 2️⃣ **Modify Shadowrocket Rules**
-1. Go to **Settings → Rules**
-2. Add a rule:
-   - **Type**: `IP-CIDR`
-   - **IP CIDR**: `192.168.1.0/24` (or your home LAN segment)
-   - **Policy**: `GoHomeEasy` proxy node
-3. Save and restart VPN ✅
+## 📥 **Step 4: Client Subscription (Shadowrocket)**
+
+### **1. Add Subscription**
+
+*   🏆 **Cloudflare Users**:
+    ```text
+    https://your-worker...workers.dev/?api_key=YOUR_SECRET_KEY
+    ```
+*   ☁️ **AWS Users**:
+    ```text
+    https://your-api...amazonaws.com/default/GoHomeEasy?api_key=YOUR_SECRET_KEY
+    ```
+
+### **2. Routing Rules (Crucial)**
+
+To ensure only home traffic goes through this proxy:
+
+1.  **Config** -> **Rules** -> **Add Rule**.
+2.  **Type**: `IP-CIDR`.
+3.  **Value**: `192.168.1.0/24` (Match your home subnet).
+4.  **Policy**: Select `GoHomeEasy` (the subscription group).
+5.  **Save**.
+
+### **3. Subnet Conflict (Optional)**
+
+If your current network is also `192.168.1.x`:
+*   **Recommended**: Change your home router subnet to something distinct like `192.168.50.x`.
+*   **Alternative**: In Shadowrocket Settings -> **On Demand**, enable **Route Includes Local Network**.
 
 ---
 
-🚀 **GoHomeEasy - Access your home LAN from anywhere, even without a public IP!** 🌎
+## 🛡 **FAQ**
 
----
+**Q: Is Cloudflare Workers free?**
+A: Yes, the free tier allows 100,000 requests per day, which is more than enough for personal use.
+
+**Q: Why isn't the subscription updating?**
+A: Check the logs (Cloudflare Worker logs or AWS CloudWatch). Common issues include mismatched `SECRET_KEY` or incorrect permissions (DynamoDB/KV).
+
+**Q: Cannot connect at home?**
+A: Ensure Lucky STUN is working (TCP) and getting a public IP. Some corporate networks block non-standard ports; try using Lucky's port mapping to standard ports if possible.

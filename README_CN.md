@@ -2,203 +2,218 @@
 
 ## [English](README.md) | 中文
 
-**GoHomeEasy** 是一个基于 Cloudflare Workers 的 Shadowsocks/Clash 订阅管理工具，专为 **没有公网 IP 的家庭宽带用户** 设计，能够在外部网络访问家庭局域网。
+**GoHomeEasy** 是一个基于 Serverless (AWS Lambda / Cloudflare Workers) 的 Shadowsocks/Clash 订阅管理工具，专为 **没有公网 IP 的家庭宽带用户** 设计。
 
-它利用 **Lucky提供的内网穿透**，并结合订阅自动更新，使用户可以在 **任何地方远程访问家中的 Shadowsocks 服务器**，无需手动频繁更换动态IP地址和端口。
+它利用 **Lucky 提供的内网穿透**，结合 Serverless 自动更新订阅，让你可以在 **任何地方（公司、以及手机移动网络）直连访问家庭局域网**，无需手动频繁更换动态 IP 和端口。
 
----
+-----
 
-## 🌟 **功能特点**
+## 🌟 **为什么选择 GoHomeEasy？**
 
-✅ **适合没有公网 IP 的家庭宽带用户，远程访问家庭局域网**  
+✅ **家庭宽带神器**：适合无公网 IP 环境，远程访问 NAS、软路由、PC。
 
-✅ **支持 Lucky Webhook 自动更新 Shadowsocks 订阅**  
+✅ **自动化**：配合 Lucky Webhook，家中 IP 变动后自动更新订阅。
 
-✅ **支持动态配置 Shadowsocks `method`（加密方式）和 `password`（密码）**  
+✅ **安全**：支持 API Key 认证，防止恶意扫描。
 
-✅ **基于 Cloudflare Workers + KV，无需自建服务器**  
+✅ **无需服务器**：基于 Serverless 架构，免费额度通常足够个人使用。
 
-✅ **支持 API Key 认证，确保数据安全**  
+### 🇨🇳 **中国大陆用户特别推荐**
 
-✅ **支持 Cloudflare 自有域名访问，绕过 `workers.dev` 在中国大陆的屏蔽**  
+| 特性 | **AWS Lambda (推荐)** 🏆 | **Cloudflare Workers** |
+| :--- | :--- | :--- |
+| **国内访问** | **✅ 直连 (速度快/稳)** | ❌ `workers.dev` 被墙 (需自备域名优选IP) |
+| **部署难度** | ⭐⭐⭐ (稍繁琐) | ⭐ (极简) |
+| **成本** | **免费** (每月100万次请求) | **免费** (每日10万次请求) |
 
----
+-----
 
 ## ⚙️ **部署前置条件**
 
-要成功部署 **GoHomeEasy**，你需要准备以下环境：
+1.  **家庭服务器/软路由**：安装 OpenWrt 或 Linux。
+2.  **Shadowsocks 服务端**：推荐 OpenWrt 的 **PassWall2** 或 **Shadowsocks-Libev**。
+3.  **Lucky 内网穿透**：已安装并配置好 STUN 穿透（[Lucky官网](https://lucky666.cn)），能够显示穿透成功。
+4.  **云账号**：
+      * **AWS 账号** (推荐)：用于部署 Lambda。
+      * *或* Cloudflare 账号：用于部署 Workers。
+5.  **客户端**：iOS/MacOS Shadowrocket (小火箭) 或其他支持 SS/Clash 订阅的客户端。
 
-🔹 **Linux家庭服务器或OpenWRT软路由**
+-----
 
-🔹 **配置Shadowsocks服务器**（推荐使用OpenWRT中的[PassWall2插件](https://github.com/xiaorouji/openwrt-passwall2)）
+## 💻 **第一步：配置家庭 Shadowsocks 服务器**
 
-🔹 **安装[Lucky 内网穿透](https://lucky666.cn)**，按教程开启内网穿透功能，将Shadowsocks服务器端口映射到公网
+*以 OpenWrt Passwall2 为例：*
 
-🔹 **Cloudflare账号**（免费账号即可，用于 Workers 部署）
+1.  **添加节点**：在“服务器端”点击“添加”。
+2.  **配置参数**：
+      * **类型**：Shadowsocks (推荐 Sing-Box 核心)。
+      * **监听端口**：`8000` (或其他)。
+      * **加密方式**：推荐 `chacha20-ietf-poly1305`。
+      * **密码**：设置一个强密码。
+      * **局域网访问**：**务必勾选** (允许远程访问家庭内网设备)。
+3.  **保存并启用**。
 
-🔹 **使用Cloudflare管理DNS解析的域名**（可选，仅用于绕过中国大陆对workers.dev域名的屏蔽）
+-----
 
-🔹 **支持解析Shadowsocks或Clash YAML订阅的手机/电脑客户端**（如iOS中的Shadowrocket APP）
+## ☁️ **第二步：部署云端订阅服务 (二选一)**
 
-## 💻 **配置Shadowsocks服务器**
+### 🏆 **方案 A：AWS Lambda (国内直连推荐)**
 
-以Passwall2为例：
+此方案利用 AWS API Gateway + Lambda + DynamoDB，国内网络可直接访问 API，稳定性极佳。
 
-### **1️⃣ 在Passwall2的 “服务器端” 选项卡中点击 “添加” 按钮**
-### **2️⃣ 按以下内容配置：**
-   - 启用：勾选
-   - 备注：自定名称
-   - 类型：Sing-Box
-   - 协议名称：Shadowsocks
-   - 监听端口：8000（或自选）
-   - 密码：自定
-   - 加密：自选，建议选择chacha20-ietf-poly1305
-   - 接受局域网访问：**请务必勾选**
-   - 其他保持默认即可
-### **3️⃣ 点击右下角“保存并应用“按钮，回到主菜单**
-### **4️⃣ 勾选“启用”，之后点击右下角“保存并应用“按钮**
+#### **1. 创建 DynamoDB 表 (存储数据)**
 
+1.  登录 [AWS Console](https://console.aws.amazon.com/)，选择一个区域（**推荐新加坡**），搜索并进入 **DynamoDB**。
+2.  点击 **Create table（创建表）**。
+3.  **Table name（表名）**: 输入 `Subscription`。
+4.  **Partition key（分区键）**: 输入 `id` (类型选择 String)。
+5.  其他保持默认，点击 **Create table（创建表）**。
 
----
+#### **2. 创建 Lambda 函数**
 
-## 🛠 **配置 Cloudflare Workers**
+1.  搜索并进入 **Lambda** 服务，请确保此时AWS与刚刚设置数据库时位于同一区域（如新加坡）。
+2.  点击 **Create function（创建函数）** -\> **Author from scratch**。
+3.  **Function name（函数名）**: `GoHomeEasy`。
+4.  **Runtime（运行时）**: 选择 `Node.js 24.x`（或更新的版本）。
+5.  点击 **Create function（创建函数）**。
 
-### **1️⃣ 创建 Workers 服务**
-1. 登录 **[Cloudflare Dashboard](https://dash.cloudflare.com/)**
-2. 进入左侧 **Workers & Pages**，点击蓝色 **“创建”** 按钮
-3. 选择 **“从模板开始”** 中的 **“Hello world”**
-4. 输入 **服务名称**（如 `GoHomeEasy`），点击右下角蓝色 **“部署”** 按钮
+#### **3. 编写代码 & 安装依赖**
 
-### **2️⃣ 编辑 Workers 代码**
-1. 进入 **新建的 Worker**，点击右上角 **“< / >” 按钮**，编辑项目代码
-2. **删除默认代码**
-3. **粘贴 `GoHomeEasy_XXX.js` 代码**
+由于 Lambda 需要 AWS SDK，我们直接使用控制台编辑：
 
-   3.1 本项目的 `GoHomeEasy_SS.js` 文件对应Shadowsocks标准订阅格式。
-   
-   3.2 本项目的 `GoHomeEasy_Clash.js` 文件对应Clash YAML标准订阅格式。
+1.  在代码源文件列表，将 `index.mjs` 的内容替换为以下代码：
 
-   如果使用iOS Shadowrocket APP，二者都可以。否则请根据你使用的APP选择支持的格式。
-   
-5. **修改源代码中的"your_secure_api_key"**，并保留好这一密钥字段
-6. **点击 “部署” 按钮**
+- 如需Shadowsocks格式的订阅——`GoHomeEasy_AWS_SS.js`
+- 如需Clash格式的订阅——`GoHomeEasy_AWS_Clash.js`
 
-### **3️⃣ 绑定 Cloudflare KV 存储**
-1. 进入左侧菜单 **对象和数据库** → **KV**
-2. 点击蓝色 **+创建** 按钮，命名为 `GoHomeEasy_KV`
-3. 进入刚刚创建的 **Worker** → **“设置”**
-4. **点击左侧菜单 “绑定” ，再点击右侧 “定义 Worker 可用的资源集”旁的“+添加”，选择“KV命名空间”**
-   - **变量名称**: `KV_NAMESPACE`
-   - **KV命名空间**: 选择 `GoHomeEasy_KV`
-1. 点击右下角蓝色 **部署** 按钮
+2.  点击 **Deploy（部署）** 保存。
 
----
+#### **4. 配置权限与环境变量**
 
-## 🌍 **使用 Cloudflare 自有域名访问 Workers（可选，用于绕过中国大陆屏蔽）**
+1.  **环境变量**：
+      * 点击 **Configuration（配置）** -\> **Environment variables（环境变量）** -\> **Edit（编辑）**。
+      * 添加 `SECRET_KEY`: 设置你的 API 密钥（如 `my_secret_123`）。
+      * 添加 `TABLE_NAME`: `Subscription`。
+2.  **IAM 权限**：
+      * 点击 **Configuration（配置）** -\> **Permissions（权限）** -\> 点击 Role 名称。
+      * 在 IAM 控制台，点击 **Add permissions（添加权限）** -\> **Create inline policy（创建内联策略）**。
+      * 选择 Service: **DynamoDB**。
+      * Actions: 勾选 `PutItem` 和 `GetItem`。
+      * Resources: 指定你的表 ARN。
+      * 保存策略。
 
-#### **按此方法设置：https://github.com/zizifn/edgetunnel/issues/27**
+#### **5. 创建 API 网关 (获取 URL)**
 
----
+1.  回到 Lambda 页面，点击 **Add trigger**。
+2.  选择 **API Gateway**。
+3.  **Create a new API** -\> **HTTP API**。
+4.  Security: **Open** (我们在代码里验证 Key)。
+5.  创建后，复制 **API Endpoint**，例如：`https://xyz.execute-api.ap-northeast-1.amazonaws.com/default/GoHomeEasy`。
 
-## 🔗 **配置 Lucky STUN内网穿透Webhook**
+-----
 
-在 **Lucky STUN内网穿透配置页面**，填写以下内容：
+### **方案 B：Cloudflare Workers (海外用户/已有域名)**
 
-1. **穿透类型**：IPV4-TCP
-2. **UPnP**：开启（如果你的Lucky安装在非拨号路由器设备，需要开启本选项，并需要开启拨号路由器设备的UPnP）
-3. **不使用Lucky内置端口转发**：建议开启，可以有效增加访问速度）如果遇到问题，可以尝试关闭）
-4. **UPnP 内部端口自定义**：（Passwall中设置的）Shadowrocket服务端口，如8000
-5. **Webhook**：开启，并填写以下内容：
+适合中国大陆以外用户，或拥有托管在 Cloudflare 的域名并懂得如何设置路由的中国大陆用户。
 
-### **1️⃣ Webhook URL（POST 请求）**
+1.  登录 **[Cloudflare Dashboard](https://dash.cloudflare.com/)**。
+2.  **创建 KV**：在 `Workers & Pages` -\> `KV` 中创建命名空间 `GoHomeEasy_KV`。
+3.  **创建 Worker**：
+      * 新建 Worker，命名为 `GoHomeEasy`。
+      * 将项目中的 `GoHomeEasy_SS.js` 代码复制进去。
+      * 修改代码中的 `SECRET_KEY`。
+4.  **绑定 KV**：
+      * 在 Worker 设置 -\> **绑定** 中，添加 KV 命名空间。
+      * 变量名: `KV_NAMESPACE`，对应的 KV: `GoHomeEasy_KV`。
+5.  **部署**。
 
-请更改为你自己的域名：
+-----
 
-- 🌍 **Cloudflare Workers 原生域名**（适用于未被屏蔽地区）：
- ```
- https://your-worker-name.your-account-name.workers.dev/
- ```
-- 🇨🇳 **Cloudflare 自有域名**（适用于中国大陆）：
- ```
- https://your-gohome-name.yourdomain.com/
- ```
+## 🔗 **第三步：配置 Lucky Webhook**
 
-### **2️⃣ 请求头（Headers）**
+在 Lucky 后台的 STUN 穿透规则中，开启 **Webhook** 功能。
+
+### **1. Webhook URL (POST)**
+
+根据你的部署方案填写 URL：
+
+  * 🏆 **AWS Lambda 用户**:
+    ```text
+    https://你的API-ID.execute-api.区域.amazonaws.com/default/GoHomeEasy
+    ```
+  * ☁️ **Cloudflare 用户**:
+    ```text
+    https://你的worker名.你的子域.workers.dev/
+    ```
+
+### **2. Request Headers (请求头)**
+
+```text
+Content-Type: application/json
+Authorization: Bearer 你的SECRET_KEY
 ```
-   Content-Type: application/json
-   Authorization: Bearer 此处替换为你的API_KEY 
-```
 
-### **3️⃣ 请求体（Body）**
+### **3. Request Body (请求体)**
+
+Lucky 会自动替换 `#{ip}` 和 `#{port}` 变量。
+
 ```json
 {
   "ip": "#{ip}",
   "port": "#{port}",
   "method": "chacha20-ietf-poly1305",
-  "password": "your_password"
+  "password": "你的Shadowsocks密码"
 }
 ```
 
-📌 **说明**：
-- `#{ip}` 和 `#{port}` 是 Lucky 自动填充的公网 IP 和端口。
-- `method` 可根据 Shadowsocks 服务器的加密方式调整（推荐使用 `chacha20-ietf-poly1305`）。
-- `password` 为 Shadowsocks 服务器的连接密码。
+> **注意**：`method` 和 `password` 必须与你在 Passwall 中设置的一致。
 
-**禁用接口调用成功字符串检测**：打开
+-----
 
-### **重要❗️：（给中国大陆用户）
+## 📥 **第四步：客户端订阅 (Shadowrocket)**
 
-1. 如果你的Lucky所在服务器可自动翻墙，请务必在翻墙服务设置STUN服务的3478端口为【直连（不翻墙）】，否则获取到的公网IP会错误。**
-2. 如果你的Lucky所在服务器不可自动翻墙，HTTPS协议访问Cloudflare域名可能会遇到404错误，导致webhook更新失败。如遇到此问题，建议配置将该服务器可自动翻墙，或者可以尝试在Webhook URL改为http访问（但因此请求会明文发送，导致API_KEY泄漏）。
+以 iOS 小火箭为例，添加订阅链接，实现自动同步家中 IP。
 
----
+### **1. 添加订阅**
 
-## 📥 **4️⃣ 客户端订阅配置**
+点击右上角 `+`，类型选择 **Subscribe (订阅)**，URL 填入：
 
-以Shadowrocket🚀APP为例：
+  * 🏆 **AWS Lambda 用户**:
+    ```text
+    https://你的API-ID...amazonaws.com/default/GoHomeEasy?api_key=你的SECRET_KEY
+    ```
+  * ☁️ **Cloudflare 用户**:
+    ```text
+    https://你的worker...workers.dev/?api_key=你的SECRET_KEY
+    ```
 
-### **1️⃣ 添加订阅 URL**
+### **2. 设置分流规则 (关键)**
 
-1. **打开 Shadowrocket，点击右上角 `+` 号，类型选择“订阅”**  
-2. **URL 填写**（适用于不同网络环境）：
-   - 🌍 **Cloudflare Workers 原生域名**（适用于未被屏蔽地区）：
-     ```
-     https://your-worker-name.workers.dev/?api_key=your_secure_api_key
-     ```
-   - 🇨🇳 **Cloudflare 自有域名**（适用于中国大陆）：
-     ```
-     https://gohome.yourdomain.com/?api_key=your_secure_api_key
-     ```
-1. **点击“保存”**，订阅会自动更新  ✅  
+为了只在访问家庭内网时使用此节点，避免影响日常上网：
 
----
+1.  进入 **配置** -\> **规则**。
+2.  添加一条新规则（放在最顶部）：
+      * **类型**: `IP-CIDR`
+      * **值**: `192.168.1.0/24` (请根据你家路由器的实际网段修改，如 192.168.31.0/24)
+      * **策略**: 选择 `GoHomeEasy` (刚刚添加的订阅节点组)
+3.  **保存**。
 
-### **2️⃣ 修改 Shadowrocket 分流规则**
+### **3. 解决同网段冲突 (可选)**
 
-1. **进入 `配置`**  
-2. **选择 `规则`**  
-3. **在规则列表的第一行（最优先）添加以下规则：**  
-   - 📌 **类型**：`IP-CIDR`  
-   - 📌 **IP CIDR**：`192.168.1.0/24`（或你的家庭局域网网段）  
-   - 📌 **策略**：选择 `GoHomeEasy` 代理节点
-4. **回到上一级菜单，选择`通用`，删除以下内容：**
-   - “跳过代理”中包含你的家庭局域网的网段，如192.168.0.0./16
-   - “TUN旁路路由”中包含你的家庭局域网的网段，如192.168.0.0./16
-5. **保存规则，重启VPN，应用配置**  ✅  
+如果你在外部的网络也是 `192.168.1.x`，可能会无法连接回家。建议：
 
----
+  * **方法一 (推荐)**：修改家中路由器的网段为不常用的，如 `192.168.50.x`。
+  * **方法二**：在 Shadowrocket 设置 -\> **按需连接** -\> 开启 **包括本地网络**。
 
-### **3️⃣ 网段冲突时的设置（可选）**
+-----
 
-如果你在 **另一个与家庭局域网相同网段的网络**（如同为192.168.1.X）中，仍想访问家庭局域网，请调整 **Shadowrocket 设置**：
+## 🛡 **常见问题**
 
-1. **进入 `Shadowrocket → 设置`**  
-2. **找到 `按需连接`**  
-3. **开启以下选项**：
-   - ✅ **包括所有网络**  
-   - ✅ **包括本地网络**  
-4. **这样可以确保在同一网段的外部网络中仍然可以访问家庭局域网设备** 🎯  
+**Q: AWS 会产生费用吗？**
+A: AWS Lambda 每月有 40万GB-秒的计算额度和 100万次请求免费额度；DynamoDB 也有 25GB 的免费存储。对于个人自用（仅更新和获取订阅），基本**永久免费**。
 
----
+**Q: 为什么 Lucky 显示 Webhook 成功，但订阅没更新？**
+A: 请检查 Lambda/Worker 的日志。常见原因是 `SECRET_KEY` 不匹配，或者 AWS IAM 权限没配置好（导致无法写入 DynamoDB）。
 
-🚀 **GoHomeEasy，让没有公网 IP 的家庭宽带用户也能随时随地访问家庭局域网！** 🌎
+**Q: 在外面无法连接回家？**
+A: 请确保家里的 Lucky STUN 穿透类型是 TCP，并且获取到了正确的公网 IP。如果外部司网络屏蔽了非标准端口（如 STUN 的高位端口），可能需要尝试 Lucky 的端口映射功能或更换端口。
